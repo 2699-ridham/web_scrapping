@@ -1,66 +1,129 @@
-let request=require("request");
-let cheerio=require("cheerio");
-let fs=require("fs");
-let path=require("path");
+let request = require("request");
+let cheerio = require("cheerio");
+let fs = require("fs");
+let path = require("path");
+let xlsx = require("xlsx");
+function processSinglematch(url) {
 
-// let url="https://www.espncricinfo.com/series/ipl-2020-21-1210595/delhi-capitals-vs-mumbai-indians-final-1237181/full-scorecard";
-function processMatch(url){
-    request(url,cb);
+    request(url, cb);
 }
-function cb(error,response,html){
-    if(error){
-        console.log(error);
-    }else if(response.statusCode == 404){
-        console.log("page not found");
-    }else{
+function cb(error, response, html) {
+
+    if (error) {
+        console.log(error); // Print the error if one occurred
+    } else if (response.statusCode == 404) {
+        console.log("Page Not Found")
+    }
+    else {
+        // console.log(html); // Print the HTML for the request made 
         dataExtracter(html);
     }
 }
-
-function dataExtracter(html){
-    let searchTool=cheerio.load(html);
-    let Mainfolder=path.join(process.cwd(),"cricbuzz");
-    if(fs.existsSync(Mainfolder) == false){
-        fs.mkdirSync(Mainfolder);
-    }
-    let iplfolder=path.join(Mainfolder,"ipl");
-    if(fs.existsSync(iplfolder) == false){
-        fs.mkdirSync(iplfolder);
-    }
-    let InningsArr=searchTool(".Collapsible");
-    // let htmldata="";
-    for(let i=0;i<InningsArr.length;i++){
-        let teamNameElement=searchTool(InningsArr[i]).find("h5");
-        // htmldata += searchTool(InningsArr[i]).html();
-        // fs.writeFileSync("t.html",htmldata);
-        let teams=teamNameElement.text();
+function dataExtracter(html) {
+    let searchTool = cheerio.load(html)
+    // team name
+    let bothInningArr = searchTool(".Collapsible");
+    for (let i = 0; i < bothInningArr.length; i++) {
+        // scoreCard = searchTool(bothInningArr[i]).html();
+        let teamNameElem = searchTool(bothInningArr[i]).find("h5");
+        let teamName = teamNameElem.text();
         // console.log(teamName);
-        let teamsplit=teams.split("INNINGS")[0];
-        // console.log(teamsplit);
-        let teamName=teamsplit.trim();
-
-        let teamfolder=path.join(iplfolder,teamName);
-        if(fs.existsSync(teamfolder) == false){
-            fs.mkdirSync(teamfolder);
-        }
-        // console.log(teams);
-        let batsmanName=searchTool(InningsArr[i]).find(".table.batsman tbody tr");
-        // console.log(batsmanName.length);
-        for(let j=0;j<batsmanName.length;j++){
-            let numberOftd=searchTool(batsmanName[j]).find("td");
-            // console.log(numberOftd.length);
-            if(numberOftd.length == 8){
-                let playername=searchTool(numberOftd[0]).text();
-                // console.log(playername);
-                let playerfolder = path.join(teamfolder,playername + ".xlsx");
-                if(fs.existsSync(playerfolder) == false){
-                    fs.writeFileSync(playerfolder,"ridham");
-                }
+        teamName = teamName.split("INNINGS")[0];
+        // console.log(teamName);
+        teamName = teamName.trim();
+        // console.log(teamName);
+        let batsManTableBodyAllRows = searchTool(bothInningArr[i]).find(".table.batsman tbody tr");
+        console.log(batsManTableBodyAllRows.length)
+        // type cohersion loops -> 
+        for (let j = 0; j < batsManTableBodyAllRows.length; j++) {
+            let numberofTds = searchTool(batsManTableBodyAllRows[j]).find("td");
+            // console.log(numberofTds.length);
+            if (numberofTds.length == 8) {
+                // console.log("You are valid")
+                let playerName = searchTool(numberofTds[0]).text();
+                let runs = searchTool(numberofTds[2]).text();
+                let balls = searchTool(numberofTds[3]).text();
+                let fours = searchTool(numberofTds[5]).text();
+                let sixes = searchTool(numberofTds[6]).text();
+                // myTeamName	name	venue	date opponentTeamName	result	runs	balls	fours	sixes	sr
+                console.log(playerName, "played for", teamName, "scored", runs, "in", balls, "with ", fours, "fours and ", sixes, "sixes");
+                processPlayer(playerName, teamName, runs, balls, fours, sixes);
             }
         }
-        // console.log("--------------------");
+        console.log("``````````````````````````````````````")
+        // fs.writeFileSync(`innning${i+1}.html`,scoreCard);
     }
+    // players name
+}
+function processPlayer(playerName, teamName, runs, balls, fours, sixes) {
+    let obj = {
+        playerName,
+        teamName,
+        runs,
+        balls,
+        fours,
+        sixes
+    }
+    let mainDir=path.join(process.cwd(),"Cricbuzz");
+    if(fs.existsSync(mainDir) == false){
+        fs.mkdirSync(mainDir);
+    }
+
+    let iplFolder=path.join(mainDir,"Ipl");
+    if(fs.existsSync(iplFolder) == false){
+        fs.mkdirSync(iplFolder);
+    }
+    let dirPath = path.join(iplFolder, teamName);
+    //    folder 
+    if (fs.existsSync(dirPath) == false) {
+        fs.mkdirSync(dirPath)
+    }
+    // playerfile 
+    let playerFilePath = path.join(dirPath, playerName + ".xlsx");
+    let playerArray = [];
+    if (fs.existsSync(playerFilePath) == false) {
+        playerArray.push(obj);
+    } else {
+        // append
+        playerArray = excelReader(playerFilePath, playerName);
+        playerArray.push(obj);
+    }
+    // write in the files
+    // writeContent(playerFilePath, playerArray);
+    excelWriter(playerFilePath, playerArray, playerName);
+}
+// function getContent(playerFilePath) {
+//     let content = fs.readFileSync(playerFilePath);
+//     return JSON.parse(content);
+// }
+function writeContent(playerFilePath, content) {
+    let jsonData = JSON.stringify(content)
+    fs.writeFileSync(playerFilePath, jsonData);
 }
 module.exports = {
-    processMatch
+    processSinglematch
+}
+
+function excelWriter(filePath, json, sheetName) {
+    // workbook create
+    let newWB = xlsx.utils.book_new();
+    // worksheet
+    let newWS = xlsx.utils.json_to_sheet(json);
+    xlsx.utils.book_append_sheet(newWB, newWS, sheetName);
+    // excel file create 
+    xlsx.writeFile(newWB, filePath);
+}
+// // json data -> excel format convert
+// // -> newwb , ws , sheet name
+// // filePath
+// read 
+//  workbook get
+function excelReader(filePath, sheetName) {
+    // player workbook
+    let wb = xlsx.readFile(filePath);
+    // get data from a particular sheet in that wb
+    let excelData = wb.Sheets[sheetName];
+    // sheet to json 
+    let ans = xlsx.utils.sheet_to_json(excelData);
+    return ans;
 }
